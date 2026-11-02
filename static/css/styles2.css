@@ -1,0 +1,87 @@
+/* Navigation bar */
+.header {
+    background-color: #1b42a4;
+    color: white;
+    padding: 10px;
+}
+
+.header a {
+    color: white;
+    text-decoration: none;
+    margin-left: 15px;
+}
+
+.header a:hover {
+    text-decoration: underline;
+}
+
+/* Row action buttons */
+.row-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.row-actions form {
+    margin: 0;
+}
+
+/* Keep buttons side by side on desktop */
+@media (min-width: 992px) {
+    .row-actions {
+        flex-wrap: nowrap;
+    }
+}
+
+/* Wrap long emails */
+.cell-email {
+    overflow-wrap: anywhere;
+}
+
+/* Phones and tablets: rows as cards */
+@media (max-width: 991.98px) {
+    .table-cards thead {
+        display: none;
+    }
+
+    .table-cards tr {
+        display: block;
+        margin-bottom: 15px;
+        border: 1px solid #dee2e6;
+    }
+
+    /* Label on the left, value on the right */
+    .table-cards td {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 6px 12px;
+        border: none;
+        border-bottom: 1px solid #eee;
+        text-align: right;
+        overflow-wrap: anywhere;
+    }
+
+    .table-cards td::before {
+        content: attr(data-label);
+        flex: none;
+        font-weight: bold;
+        text-align: left;
+    }
+}
+
+/* Small laptops: tighter cells */
+@media (min-width: 992px) and (max-width: 1399.98px) {
+    .table-cards th,
+    .table-cards td {
+        padding: 6px;
+        font-size: 14px;
+    }
+}
+
+/* Reports subtitle */
+.report-title {
+    margin-bottom: 20px;
+    font-weight: 600;
+}

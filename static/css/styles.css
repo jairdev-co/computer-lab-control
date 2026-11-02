@@ -1,0 +1,156 @@
+/* Reserve scrollbar space so the header doesn't shift */
+html {
+    scrollbar-gutter: stable;
+}
+
+/* Header and content share one width: wider than Bootstrap's on laptops,
+   capped so big screens don't stretch the navigation bar and tables */
+@media (min-width: 992px) {
+    .container.page-width {
+        max-width: min(95%, 1280px);
+    }
+}
+
+/* Header */
+.title-lab {
+    font-size: 21px;
+    font-weight: bold;
+}
+
+.logo-lab {
+    width: 100px;
+    height: 100px;
+    margin-bottom: 10px;
+}
+
+/* Forms */
+label {
+    font-weight: bold;
+    font-size: 17px;
+}
+
+/* Standard button size */
+.btn {
+    font-size: 17px;
+    text-transform: none;
+    min-width: 96px;
+}
+
+.form-control {
+    font-size: 17px;
+}
+
+/* Theme colors (Universidad CESMAG) */
+a {
+    color: #1b42a4;
+}
+
+.btn-primary {
+    background: #1b42a4;
+    border-color: #1b42a4;
+}
+
+.btn-primary:hover,
+.btn-primary:focus {
+    background: #0a3264;
+    border-color: #0a3264;
+}
+
+.btn-primary:not(:disabled):not(.disabled):active {
+    background: #072447;
+    border-color: #072447;
+}
+
+.btn-outline-primary {
+    color: #1b42a4;
+    border-color: #1b42a4;
+}
+
+.btn-outline-primary:hover,
+.btn-outline-primary:focus {
+    color: #fff;
+    background: #1b42a4;
+    border-color: #1b42a4;
+}
+
+.btn-success {
+    background: #2e7d32;
+    border-color: #2e7d32;
+}
+
+.btn-success:hover,
+.btn-success:focus {
+    background: #27692b;
+    border-color: #27692b;
+}
+
+.btn-success:not(:disabled):not(.disabled):active {
+    background: #1b5e20;
+    border-color: #1b5e20;
+}
+
+.btn-danger {
+    background: #d40000;
+    border-color: #d40000;
+}
+
+.btn-danger:hover,
+.btn-danger:focus {
+    background: #b00000;
+    border-color: #b00000;
+}
+
+.btn-danger:not(:disabled):not(.disabled):active {
+    background: #8f0000;
+    border-color: #8f0000;
+}
+
+/* Alerts and tables */
+.alert {
+    font-weight: bold;
+    font-size: 17px;
+}
+
+table {
+    font-size: 15px;
+}
+
+/* Row buttons match the table font size */
+table .btn {
+    font-size: 15px;
+}
+
+/* Phones */
+@media (max-width: 576px) {
+    h1 {
+        font-size: 5.5vw !important;
+    }
+}
+
+/* Footer */
+.app-footer {
+    margin-top: 24px;
+    padding: 20px 16px;
+    background-color: #fff;
+    border-top: 1px solid #e4e4e7;
+    font-size: 14px;
+    color: #8a8a93;
+}
+
+.app-footer p {
+    margin: 0;
+}
+
+.app-footer .footer-credit {
+    margin-top: 4px;
+    font-size: 12px;
+}
+
+.app-footer a {
+    color: inherit;
+}
+
+.app-footer a:hover {
+    color: #1b42a4;
+    text-decoration: underline;
+}
