@@ -64,9 +64,10 @@
                 <td data-label="Respuesta">{{ row.respuesta_incidencia or '' }}</td>
                 <td data-label="Operaciones">
                     <div class="row-actions">
-                        <a href="/edit/{{ row.id }}" class="btn btn-secondary">Editar</a>
+                        <a href="/edit/{{ row.id }}?page={{ page }}" class="btn btn-secondary">Editar</a>
                         <form action="/delete/{{ row.id }}" method="POST">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="page" value="{{ page }}">
                             <button type="submit" class="btn btn-danger btn-delete">Eliminar</button>
                         </form>
                     </div>
@@ -76,5 +77,25 @@
         </tbody>
     </table>
 </div>
+
+{# Pagination #}
+{% if total_pages > 1 %}
+<nav aria-label="Paginación de reportes">
+    <ul class="pagination pagination-lab justify-content-center">
+        <li class="page-item {% if page == 1 %}disabled{% endif %}">
+            <a class="page-link" href="/admin?page={{ page - 1 }}">Anterior</a>
+        </li>
+        {# Only the pages next to the current one, so the bar stays short #}
+        {% for number in range([page - 2, 1]|max, [page + 2, total_pages]|min + 1) %}
+        <li class="page-item {% if number == page %}active{% endif %}" {% if number == page %}aria-current="page"{% endif %}>
+            <a class="page-link" href="/admin?page={{ number }}">{{ number }}</a>
+        </li>
+        {% endfor %}
+        <li class="page-item {% if page == total_pages %}disabled{% endif %}">
+            <a class="page-link" href="/admin?page={{ page + 1 }}">Siguiente</a>
+        </li>
+    </ul>
+</nav>
+{% endif %}
 
 {% endblock %}

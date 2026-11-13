@@ -45,6 +45,9 @@ LABORATORIOS = [
     "Laboratorio de Redes",
 ]
 
+# Reports per page in the admin panel
+PER_PAGE = 10
+
 # Session and security settings
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", os.urandom(24).hex())
 # Idle timeout: the session cookie is renewed on every request, so it expires after 30 min without activity
@@ -276,14 +279,23 @@ def login_admin():
     return render_template("login.html", message=5 if request.args.get("expirada") else None)
 
 
-# Admin dashboard with all records
+# Admin dashboard: records from newest to oldest, PER_PAGE at a time
 @app.route("/admin")
 @login_required
 def admin_data():
+    page = request.args.get('page', 1, type=int)
     with get_db_cursor(row_factory=psycopg.rows.dict_row) as cursor:
-        cursor.execute('SELECT * FROM control_laboratorios_sistemas ORDER BY fecha_registro DESC')
+        cursor.execute('SELECT count(*) AS total FROM control_laboratorios_sistemas')
+        total = cursor.fetchone()['total']
+        total_pages = max(1, (total + PER_PAGE - 1) // PER_PAGE)
+        page = min(max(page, 1), total_pages)
+        cursor.execute(
+            'SELECT * FROM control_laboratorios_sistemas ORDER BY fecha_registro DESC, id DESC'
+            ' LIMIT %s OFFSET %s',
+            (PER_PAGE, (page - 1) * PER_PAGE)
+        )
         data = cursor.fetchall()
-    return render_template("/admin.html", data=data)
+    return render_template("/admin.html", data=data, page=page, total_pages=total_pages)
 
 
 # Edit form for a record
@@ -296,7 +308,7 @@ def get_data(id):
     if not data:
         flash("Registro no encontrado.", category='warning')
         return redirect(url_for('admin_data'))
-    return render_template("edit.html", record=data)
+    return render_template("edit.html", record=data, page=request.args.get('page', 1, type=int))
 
 
 # Update a record and email the teacher when the response changes
@@ -384,7 +396,8 @@ Infraestructura TI"""
     else:
         flash('Datos actualizados exitosamente.', category='success')
 
-    return redirect(url_for('admin_data'))
+    # Back to the page the record was edited from
+    return redirect(url_for('admin_data', page=request.form.get('page', 1, type=int)))
 
 
 # Delete a record
@@ -394,7 +407,8 @@ def delete(id):
     with get_db_cursor() as cursor:
         cursor.execute('DELETE FROM control_laboratorios_sistemas WHERE id = %s', (id,))
     flash("Datos eliminados correctamente.", category='success')
-    return redirect(url_for('admin_data'))
+    # Back to the same page
+    return redirect(url_for('admin_data', page=request.form.get('page', 1, type=int)))
 
 
 # Register a new admin user

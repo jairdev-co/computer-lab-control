@@ -85,3 +85,46 @@
     margin-bottom: 20px;
     font-weight: 600;
 }
+
+/* Pagination in the university blue of the navigation bar */
+.pagination-lab {
+    flex-wrap: wrap;
+    margin: 10px 0 20px;
+}
+
+.pagination-lab .page-link {
+    color: #1b42a4;
+    border-color: #c5cfe8;
+    font-size: 16px;
+    padding: 8px 16px;
+}
+
+.pagination-lab a.page-link:hover,
+.pagination-lab a.page-link:focus {
+    color: #fff;
+    background-color: #1b42a4;
+    border-color: #1b42a4;
+}
+
+.pagination-lab .page-item.active .page-link {
+    color: #fff;
+    background-color: #1b42a4;
+    border-color: #1b42a4;
+}
+
+.pagination-lab .page-item.disabled .page-link {
+    color: #9aa3b5;
+    background-color: #f5f6f8;
+}
+
+/* Phones: the buttons share the width */
+@media (max-width: 575.98px) {
+    .pagination-lab .page-item {
+        flex: 1 1 auto;
+        text-align: center;
+    }
+
+    .pagination-lab .page-link {
+        padding: 8px 10px;
+    }
+}

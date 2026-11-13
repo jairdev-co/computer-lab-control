@@ -19,6 +19,7 @@
 <div class="card card-body">
     <form action="/update/{{ record.id }}" method="POST">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="page" value="{{ page }}">
         <div class="form-group">
             <label for="fecha_registro">Fecha de registro</label>
             <input type="text" name="fecha_registro" id="fecha_registro" value="{{ record.fecha_registro }}" class="form-control">

@@ -17,7 +17,7 @@ Aplicación web para reportar y dar seguimiento a las incidencias de las salas d
 ## Características
 
 - **Formulario público**: el docente elige el laboratorio y registra su nombre, correo institucional (`@unicesmag.edu.co`), programa, horas de ingreso y salida y la observación. Todos los campos se validan.
-- **Panel de administración**: lista los reportes del más reciente al más antiguo y permite editarlos, responderlos o eliminarlos.
+- **Panel de administración**: lista los reportes del más reciente al más antiguo, de 10 en 10 con paginación, y permite editarlos, responderlos o eliminarlos.
 - **Aviso por correo**: cuando se guarda una respuesta nueva, el docente la recibe por correo.
 - **Administradores**: crear cuentas, restablecer contraseñas y eliminarlas. Nadie puede eliminar su propia cuenta.
 - **Reportes en Excel**: vista previa de todas las incidencias o de un rango de fechas y descarga en `.xlsx`.

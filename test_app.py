@@ -267,6 +267,43 @@ class ReportManagementTests(AppTestCase):
         self.assertEqual(self.report_count(), 0)
 
 
+class PaginationTests(AppTestCase):
+
+    def setUp(self):
+        super().setUp()
+        self.login()
+        # 23 reports, one per day: day 23 is the newest
+        for day in range(1, 24):
+            self.create_report(fecha=f"2026-10-{day:02d} 08:00:00")
+
+    def dates_on(self, url):
+        return re.findall(r'data-label="Fecha">(\d\d)/10/2026', self.client.get(url).get_data(as_text=True))
+
+    def test_pages_of_ten_from_newest_to_oldest(self):
+        self.assertEqual(self.dates_on("/admin"), [f"{d:02d}" for d in range(23, 13, -1)])
+        self.assertEqual(len(self.dates_on("/admin?page=2")), 10)
+        self.assertEqual(self.dates_on("/admin?page=3"), ["03", "02", "01"])
+
+    def test_invalid_pages_show_the_first_or_last_page(self):
+        self.assertEqual(self.dates_on("/admin?page=abc"), self.dates_on("/admin"))
+        self.assertEqual(self.dates_on("/admin?page=-1"), self.dates_on("/admin"))
+        self.assertEqual(self.dates_on("/admin?page=99"), ["03", "02", "01"])
+
+    def test_no_pagination_with_few_reports(self):
+        run_sql("DELETE FROM control_laboratorios_sistemas WHERE fecha_registro < '2026-10-20'")
+        self.assertNotIn("Siguiente", self.client.get("/admin").get_data(as_text=True))
+
+    def test_edit_and_delete_return_to_the_same_page(self):
+        report_id = run_sql("SELECT id FROM control_laboratorios_sistemas ORDER BY fecha_registro LIMIT 1",
+                            fetch=True)[0][0]
+        self.assertIn(f'href="/edit/{report_id}?page=3"', self.client.get("/admin?page=3").get_data(as_text=True))
+        self.assertIn('name="page" value="3"', self.client.get(f"/edit/{report_id}?page=3").get_data(as_text=True))
+
+        form = {**VALID_REPORT, "fecha_registro": "2026-10-01 08:00:00", "respuesta_incidencia": "", "page": "3"}
+        self.assertTrue(self.client.post(f"/update/{report_id}", data=form).location.endswith("/admin?page=3"))
+        self.assertTrue(self.client.post(f"/delete/{report_id}", data={"page": "3"}).location.endswith("/admin?page=3"))
+
+
 class UserManagementTests(AppTestCase):
 
     def setUp(self):
