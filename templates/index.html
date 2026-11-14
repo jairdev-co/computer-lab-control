@@ -33,17 +33,18 @@
         </div>
         <div class="form-group">
             <label for="nombre_docente">Nombre de docente</label>
-            <input type="text" name="nombre_docente" id="nombre_docente" class="form-control" required
+            <input type="text" name="nombre_docente" id="nombre_docente" class="form-control" required maxlength="150"
                 value="{{ form_data.nombre_docente if form_data else '' }}">
         </div>
         <div class="form-group">
             <label for="correo_electronico">Correo institucional</label>
-            <input type="email" name="correo_electronico" id="correo_electronico" class="form-control" required
+            <input type="email" name="correo_electronico" id="correo_electronico" class="form-control" required maxlength="150"
+                placeholder="usuario@unicesmag.edu.co"
                 value="{{ form_data.correo_electronico if form_data else '' }}">
         </div>
         <div class="form-group">
             <label for="programa">Programa</label>
-            <input type="text" name="programa" id="programa" class="form-control" required
+            <input type="text" name="programa" id="programa" class="form-control" required maxlength="150"
                 value="{{ form_data.programa if form_data else '' }}">
         </div>
         <div class="form-group">
@@ -63,6 +64,6 @@
         <button type="submit" class="btn btn-primary">Enviar</button>
     </form>
 </div>
-<div style="margin-top: 40px;"></div>
+<div class="mt-5"></div>
 
 {% endblock %}

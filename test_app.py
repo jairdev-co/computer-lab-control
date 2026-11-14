@@ -71,6 +71,28 @@ class HelpersTests(unittest.TestCase):
             with self.subTest(email=email):
                 self.assertIn("institucional", labs.validate_report({**VALID_REPORT, "correo_electronico": email}))
 
+    def test_report_rejects_blank_fields(self):
+        for field in ("nombre_docente", "programa", "observacion"):
+            with self.subTest(field=field):
+                self.assertEqual(labs.validate_report({**VALID_REPORT, field: "   "}),
+                                 "Todos los campos son obligatorios.")
+
+    def test_report_rejects_tricky_emails(self):
+        for email in ("ana@unicesmag.edu.co\n", "<ana>@unicesmag.edu.co", "ana@unicesmag.edu.co\nBcc: x@y.com"):
+            with self.subTest(email=email):
+                self.assertIn("institucional", labs.validate_report({**VALID_REPORT, "correo_electronico": email}))
+
+    def test_report_rejects_too_long_fields(self):
+        self.assertIn("no puede superar 150", labs.validate_report({**VALID_REPORT, "programa": "x" * 151}))
+
+    def test_report_rejects_invalid_times(self):
+        for hora in ("25:00", "abc", "07:00+05:00"):
+            with self.subTest(hora=hora):
+                self.assertIn("Hora no válida", labs.validate_report({**VALID_REPORT, "hora_ingreso": hora}))
+
+    def test_report_accepts_times_with_seconds(self):
+        self.assertIsNone(labs.validate_report({**VALID_REPORT, "hora_ingreso": "07:00:00", "hora_salida": "09:00"}))
+
     def test_report_rejects_exit_before_entry(self):
         for salida in ("07:00", "06:59"):
             with self.subTest(salida=salida):
@@ -147,6 +169,21 @@ class PublicFormTests(AppTestCase):
         self.assertIn("El computador 5 no enciende", body)
         self.assertEqual(self.report_count(), 0)
 
+    def test_fields_are_saved_without_surrounding_spaces(self):
+        self.client.post("/add_data", data={**VALID_REPORT, "nombre_docente": "  María Pérez  "})
+        self.assertEqual(run_sql("SELECT nombre_docente FROM control_laboratorios_sistemas", fetch=True)[0][0],
+                         "María Pérez")
+
+    def test_too_long_field_shows_a_clear_message(self):
+        response = self.client.post("/add_data", data={**VALID_REPORT, "programa": "x" * 151})
+        self.assertIn("no puede superar 150 caracteres", response.get_data(as_text=True))
+        self.assertEqual(self.report_count(), 0)
+
+    def test_unknown_page_shows_friendly_404(self):
+        response = self.client.get("/no-existe")
+        self.assertEqual(response.status_code, 404)
+        self.assertIn("no existe", response.get_data(as_text=True))
+
     def test_unknown_laboratory_is_rejected(self):
         self.client.post("/add_data", data={**VALID_REPORT, "identificador_laboratorio": "Sala falsa"})
         self.assertEqual(self.report_count(), 0)
@@ -185,6 +222,12 @@ class AuthTests(AppTestCase):
         self.assertEqual(response.status_code, 200)
         with self.client.session_transaction() as session:
             self.assertNotIn("user_id", session)
+
+    def test_login_page_sends_a_logged_in_admin_to_the_panel(self):
+        self.login()
+        response = self.client.get("/login")
+        self.assertTrue(response.location.endswith("/admin"))
+        self.assertEqual(self.client.get("/admin").status_code, 200)
 
     def test_login_and_logout(self):
         response = self.login()
@@ -260,6 +303,26 @@ class ReportManagementTests(AppTestCase):
                 row = run_sql("SELECT nombre_docente, hora_salida FROM control_laboratorios_sistemas", fetch=True)[0]
                 self.assertEqual(row, ("María Pérez", time(9, 0)))
 
+    def test_update_rejects_unknown_laboratory_but_keeps_old_ones(self):
+        report_id = self.create_report(identificador_laboratorio="Sala antigua")
+        self.client.post(f"/update/{report_id}", data=self.update_form(identificador_laboratorio="Sala falsa"))
+        self.assertEqual(run_sql("SELECT identificador_laboratorio FROM control_laboratorios_sistemas",
+                                 fetch=True)[0][0], "Sala antigua")
+        self.client.post(f"/update/{report_id}",
+                         data=self.update_form(identificador_laboratorio="Sala antigua", programa="Derecho"))
+        self.assertEqual(run_sql("SELECT programa FROM control_laboratorios_sistemas", fetch=True)[0][0], "Derecho")
+
+    def test_edit_form_offers_the_laboratories_and_short_times(self):
+        body = self.client.get(f"/edit/{self.create_report()}").get_data(as_text=True)
+        for lab in labs.LABORATORIOS:
+            self.assertIn(f'<option value="{lab}"', body)
+        self.assertIn('id="hora_ingreso" value="07:00"', body)
+
+    def test_invalid_update_returns_to_the_same_page(self):
+        report_id = self.create_report()
+        response = self.client.post(f"/update/{report_id}", data=self.update_form(nombre_docente="", page="2"))
+        self.assertTrue(response.location.endswith(f"/edit/{report_id}?page=2"))
+
     def test_delete_report_only_by_post(self):
         report_id = self.create_report()
         self.assertEqual(self.client.get(f"/delete/{report_id}").status_code, 405)
@@ -328,6 +391,18 @@ class UserManagementTests(AppTestCase):
         with self.client.session_transaction() as session:
             self.assertEqual(session["user_id"], self.admin_id)
 
+    def test_register_rejects_blank_and_too_long_usernames(self):
+        for username in ("   ", "u" * 101):
+            with self.subTest(username=username):
+                self.assertEqual(self.register(username=username).status_code, 200)
+        self.assertEqual(run_sql("SELECT count(*) FROM users", fetch=True)[0][0], 1)
+
+    def test_users_page_hides_delete_for_own_account(self):
+        other_id = self.create_user("soporte", "clave-vieja-1")
+        body = self.client.get("/users").get_data(as_text=True)
+        self.assertIn(f'action="/deleteuser/{other_id}"', body)
+        self.assertNotIn(f'action="/deleteuser/{self.admin_id}"', body)
+
     def test_users_page_never_shows_password_hashes(self):
         body = self.client.get("/users").get_data(as_text=True)
         self.assertIn("admin", body)
@@ -365,8 +440,24 @@ class ReportsTests(AppTestCase):
         self.assertNotIn("Septiembre", body)
 
     def test_generate_requires_both_dates(self):
-        body = self.client.post("/generate", data={"start_date": "2026-10-01"}).get_data(as_text=True)
+        body = self.client.post("/generate", data={"start_date": "2026-10-01"},
+                                follow_redirects=True).get_data(as_text=True)
         self.assertIn("Debe seleccionar una fecha de inicio y una fecha de fin.", body)
+
+    def test_generate_rejects_invalid_or_reversed_dates(self):
+        for dates, message in (({"start_date": "basura", "end_date": "2026-10-31"}, "Fechas no válidas"),
+                               ({"start_date": "2026-10-31", "end_date": "2026-10-01"}, "no puede ser posterior")):
+            with self.subTest(dates=dates):
+                response = self.client.post("/generate", data=dates, follow_redirects=True)
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(message, response.get_data(as_text=True))
+
+    def test_generate_includes_the_whole_last_day(self):
+        self.create_report(fecha="2026-10-31 23:59:59.500", nombre_docente="Ultimo")
+        body = self.client.post("/generate", data={"start_date": "2026-10-01", "end_date": "2026-10-31"}) \
+            .get_data(as_text=True)
+        self.assertIn("Ultimo", body)
+        self.assertIn("Reportes del 01/10/2026 al 31/10/2026: 2", body)
 
     def test_download_uses_the_last_date_range(self):
         self.client.post("/generate", data={"start_date": "2026-10-01", "end_date": "2026-10-31"})

@@ -89,7 +89,7 @@ python -c "import secrets; print(secrets.token_hex(32))"
 
 ### Base de datos
 
-Crea las tablas en una base vacía:
+Crea las tablas (también se puede volver a ejecutar sobre una base existente para añadir el índice por fecha):
 
 ```bash
 psql -h <host> -p <puerto> -U <usuario> -d <base> -f sql/schema.sql
@@ -100,7 +100,7 @@ psql -h <host> -p <puerto> -U <usuario> -d <base> -f sql/schema.sql
 Las cuentas nuevas se crean desde el panel, así que la primera se inserta directamente en la base. Genera el hash de la contraseña:
 
 ```bash
-python -c "from werkzeug.security import generate_password_hash; print(generate_password_hash('tu_contraseña', method='pbkdf2:sha256', salt_length=8))"
+python -c "from werkzeug.security import generate_password_hash; print(generate_password_hash('tu_contraseña'))"
 ```
 
 E insértalo:

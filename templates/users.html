@@ -38,14 +38,17 @@
             {% for row in data %}
             <tr>
                 <td>{{ row.id }}</td>
-                <td>{{ row.username }}</td>
+                <td>{{ row.username }}{% if row.id == session.user_id %} <span class="badge badge-secondary">Usted</span>{% endif %}</td>
                 <td>
                     <div class="row-actions">
                         <a href="/restore/{{ row.id }}" class="btn btn-secondary">Editar</a>
+                        {# Nobody can delete their own account #}
+                        {% if row.id != session.user_id %}
                         <form action="/deleteuser/{{ row.id }}" method="POST">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <button type="submit" class="btn btn-danger btn-delete">Eliminar</button>
                         </form>
+                        {% endif %}
                     </div>
                 </td>
             </tr>

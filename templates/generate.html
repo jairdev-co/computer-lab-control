@@ -7,6 +7,8 @@
 <div class="header d-flex justify-content-end">
     <h5>
         <a href="/download">Descargar</a>
+    </h5>
+    <h5>
         <a href="/reports">Volver</a>
     </h5>
 </div>
@@ -24,6 +26,15 @@
 {% endfor %}
 {% endif %}
 {% endwith %}
+
+{# Range shown (download exports the same records) #}
+<p class="text-muted">
+    {% if start %}
+    Reportes del {{ start.strftime('%d/%m/%Y') }} al {{ end.strftime('%d/%m/%Y') }}: {{ data | length }}
+    {% else %}
+    Todos los reportes: {{ data | length }}
+    {% endif %}
+</p>
 
 {# Filtered records #}
 <div class="table-responsive">
@@ -53,6 +64,10 @@
                 <td data-label="Hora de salida">{{ row.hora_salida | hora }}</td>
                 <td data-label="Observaciones">{{ row.observacion }}</td>
                 <td data-label="Respuesta">{{ row.respuesta_incidencia or '' }}</td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="9" class="text-center">No hay reportes en este rango de fechas.</td>
             </tr>
             {% endfor %}
         </tbody>

@@ -1,4 +1,4 @@
--- Run once on an empty database: psql -d database_name -f sql/schema.sql
+-- Safe to run again on an existing database: psql -d database_name -f sql/schema.sql
 
 -- Laboratory reports
 CREATE TABLE IF NOT EXISTS control_laboratorios_sistemas (
@@ -13,6 +13,10 @@ CREATE TABLE IF NOT EXISTS control_laboratorios_sistemas (
     observacion               TEXT         NOT NULL,
     respuesta_incidencia      TEXT
 );
+
+-- Speeds up the admin list and the date-range reports
+CREATE INDEX IF NOT EXISTS idx_control_laboratorios_fecha
+    ON control_laboratorios_sistemas (fecha_registro);
 
 -- Admin users
 CREATE TABLE IF NOT EXISTS users (

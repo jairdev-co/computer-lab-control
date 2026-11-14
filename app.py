@@ -6,7 +6,7 @@ import smtplib
 import sys
 import threading
 from contextlib import contextmanager
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from email.mime.text import MIMEText
 from io import BytesIO
 from zoneinfo import ZoneInfo
@@ -48,8 +48,24 @@ LABORATORIOS = [
 # Reports per page in the admin panel
 PER_PAGE = 10
 
+# Report fields, their labels in messages and the column limits in sql/schema.sql
+REPORT_FIELDS = {
+    'identificador_laboratorio': ("Laboratorio", 100),
+    'nombre_docente': ("Nombre de docente", 150),
+    'correo_electronico': ("Correo institucional", 150),
+    'programa': ("Programa", 150),
+    'hora_ingreso': ("Hora de ingreso", None),
+    'hora_salida': ("Hora de salida", None),
+    'observacion': ("Observaciones", None),
+}
+USERNAME_MAX_LENGTH = 100
+NAME_RE = re.compile(r"[A-Za-zÁÉÍÓÚáéíóúÜüÑñ ]+")
+EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@unicesmag\.edu\.co")
+
 # Session and security settings
-app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", os.urandom(24).hex())
+if not os.environ.get("SECRET_KEY"):
+    print("Warning: SECRET_KEY is not set; sessions will end every time the app restarts.")
+app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY") or os.urandom(24).hex()
 # Idle timeout: the session cookie is renewed on every request, so it expires after 30 min without activity
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=30)
 # Absolute timeout: log in again after 8 hours even if the session stays active
@@ -106,17 +122,15 @@ def send_email_async(subject, body, to_email):
             if not email_user or not email_pass:
                 print("Email credentials not configured.")
                 return
-            server = smtplib.SMTP("smtp.gmail.com", 587, timeout=30)
-            server.ehlo()
-            server.starttls()
-            server.ehlo()
-            server.login(email_user, email_pass)
             msg = MIMEText(body, "plain", "utf-8")
             msg["From"] = email_user
             msg["To"] = to_email
             msg["Subject"] = subject
-            server.sendmail(email_user, to_email, msg.as_string())
-            server.quit()
+            # The context manager closes the connection even when sending fails
+            with smtplib.SMTP("smtp.gmail.com", 587, timeout=30) as server:
+                server.starttls()
+                server.login(email_user, email_pass)
+                server.sendmail(email_user, to_email, msg.as_string())
             print(f"Email sent successfully to {to_email}")
         except (smtplib.SMTPAuthenticationError, smtplib.SMTPServerDisconnected) as e:
             # Gmail usually drops the connection after rejecting credentials
@@ -130,17 +144,60 @@ def send_email_async(subject, body, to_email):
     thread.start()
 
 
+# Read the given form fields without surrounding spaces
+def read_form(fields):
+    return {field: (request.form.get(field) or '').strip() for field in fields}
+
+
+# Parse an HH:MM or HH:MM:SS time; None when it is not valid
+def parse_time(value):
+    try:
+        parsed = time.fromisoformat(value)
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo is None else None
+
+
 # Validate report fields; return an error message or None
 def validate_report(form_data):
-    if not all(form_data.values()):
+    if not all(value and str(value).strip() for value in form_data.values()):
         return "Todos los campos son obligatorios."
-    if not re.match(r"^[A-Za-záéíóúÁÉÍÓÚñÑ\s]+$", form_data['nombre_docente']):
+    for field, (label, max_length) in REPORT_FIELDS.items():
+        if max_length and len(form_data[field]) > max_length:
+            return f"El campo «{label}» no puede superar {max_length} caracteres."
+    if not NAME_RE.fullmatch(form_data['nombre_docente']):
         return "El nombre del docente solo puede contener letras y espacios."
-    if not re.match(r"^[^,\s]+@(unicesmag\.edu\.co)$", form_data['correo_electronico']):
+    if not EMAIL_RE.fullmatch(form_data['correo_electronico']):
         return "Correo electrónico no válido. Debe ser un correo institucional."
-    if form_data['hora_ingreso'] >= form_data['hora_salida']:
+    hora_ingreso = parse_time(form_data['hora_ingreso'])
+    hora_salida = parse_time(form_data['hora_salida'])
+    if hora_ingreso is None or hora_salida is None:
+        return "Hora no válida. Use el formato HH:MM."
+    if hora_ingreso >= hora_salida:
         return "La hora de salida no debe ser anterior o igual a la hora de ingreso."
     return None
+
+
+# Date range kept in the session by /generate: (first day, day after the last) or None
+def session_date_range():
+    try:
+        start = date.fromisoformat(session['start_date'])
+        end = date.fromisoformat(session['end_date'])
+    except (KeyError, TypeError, ValueError):
+        return None
+    return start, end + timedelta(days=1)
+
+
+# Reports in chronological order, optionally limited to a date range
+def fetch_reports(columns, date_range=None, row_factory=None):
+    query = f"SELECT {columns} FROM control_laboratorios_sistemas"
+    params = ()
+    if date_range:
+        query += " WHERE fecha_registro >= %s AND fecha_registro < %s"
+        params = date_range
+    with get_db_cursor(row_factory=row_factory) as cursor:
+        cursor.execute(query + " ORDER BY fecha_registro, id", params)
+        return cursor.fetchall()
 
 
 # Treat None, empty and 'none' as the same value
@@ -195,6 +252,19 @@ def ratelimit_handler(e):
     return render_template('index.html', form_data=request.form), 429
 
 
+# Friendly error pages
+@app.errorhandler(404)
+def not_found_handler(e):
+    return render_template("error.html", message="La página que busca no existe."), 404
+
+
+@app.errorhandler(500)
+def server_error_handler(e):
+    return render_template(
+        "error.html", message="Ocurrió un error inesperado. Por favor, inténtelo de nuevo en unos minutos."
+    ), 500
+
+
 # Expired or missing CSRF token
 @app.errorhandler(CSRFError)
 def csrf_error_handler(e):
@@ -217,15 +287,7 @@ def index():
 @app.route("/add_data", methods=['POST'])
 @limiter.limit("10 per minute")
 def add_data():
-    form_data = {
-        'identificador_laboratorio': request.form.get('identificador_laboratorio'),
-        'nombre_docente': request.form.get('nombre_docente'),
-        'correo_electronico': request.form.get('correo_electronico'),
-        'programa': request.form.get('programa'),
-        'hora_ingreso': request.form.get('hora_ingreso'),
-        'hora_salida': request.form.get('hora_salida'),
-        'observacion': request.form.get('observacion')
-    }
+    form_data = read_form(REPORT_FIELDS)
     try:
         fecha_registro = datetime.now(LOCAL_TZ).strftime('%Y-%m-%d %H:%M:%S')
         error = validate_report(form_data)
@@ -256,9 +318,12 @@ def add_data():
 @app.route("/login", methods=["GET", "POST"])
 @limiter.limit("10 per minute", methods=["POST"])
 def login_admin():
+    # An admin who is already logged in goes straight to the panel
+    if request.method == "GET" and session.get("user_id"):
+        return redirect(url_for('admin_data'))
     session.clear()
     if request.method == "POST":
-        input_username = request.form.get("username")
+        input_username = (request.form.get("username") or "").strip()
         input_password = request.form.get("password")
         if not input_username:
             return render_template("login.html", message=1)
@@ -315,42 +380,37 @@ def get_data(id):
 @app.route("/update/<int:id>", methods=['POST'])
 @login_required
 def update_data(id):
-    form_data = {
-        'fecha_registro': request.form.get('fecha_registro'),
-        'identificador_laboratorio': request.form.get('identificador_laboratorio'),
-        'nombre_docente': request.form.get('nombre_docente'),
-        'correo_electronico': request.form.get('correo_electronico'),
-        'programa': request.form.get('programa'),
-        'hora_ingreso': request.form.get('hora_ingreso'),
-        'hora_salida': request.form.get('hora_salida'),
-        'observacion': request.form.get('observacion')
-    }
-    respuesta_incidencia = request.form.get('respuesta_incidencia')
+    page = request.form.get('page', 1, type=int)
+    form_data = read_form(['fecha_registro', *REPORT_FIELDS])
+    respuesta_incidencia_db = (request.form.get('respuesta_incidencia') or '').strip() or None
 
     error = validate_report(form_data)
     if not error:
         try:
-            datetime.fromisoformat(form_data['fecha_registro'])
+            fecha_registro = datetime.fromisoformat(form_data['fecha_registro'])
+            if fecha_registro.tzinfo is not None:
+                raise ValueError
         except ValueError:
             error = "Fecha de registro no válida. Use el formato AAAA-MM-DD HH:MM:SS."
     if error:
         flash(error, category='warning')
-        return redirect(url_for('get_data', id=id))
-
-    respuesta_incidencia_db = (
-        respuesta_incidencia if respuesta_incidencia and str(respuesta_incidencia).strip() else None
-    )
+        return redirect(url_for('get_data', id=id, page=page))
 
     try:
         with get_db_cursor() as cursor:
             cursor.execute(
-                "SELECT respuesta_incidencia FROM control_laboratorios_sistemas WHERE id = %s", (id,)
+                "SELECT respuesta_incidencia, identificador_laboratorio"
+                " FROM control_laboratorios_sistemas WHERE id = %s", (id,)
             )
             resultado = cursor.fetchone()
             if resultado is None:
                 flash("Registro no encontrado.", category='warning')
                 return redirect(url_for('admin_data'))
-            respuesta_incidencia_anterior = resultado[0]
+            respuesta_incidencia_anterior, laboratorio_anterior = resultado
+            # Same rule as the public form, but old records may keep a laboratory no longer listed
+            if form_data['identificador_laboratorio'] not in (*LABORATORIOS, laboratorio_anterior):
+                flash("Seleccione un laboratorio válido.", category='warning')
+                return redirect(url_for('get_data', id=id, page=page))
 
             query = """
                 UPDATE control_laboratorios_sistemas
@@ -369,7 +429,7 @@ def update_data(id):
     except Exception as e:
         print(f"Error updating record {id}: {e}")
         flash("Ocurrió un error al guardar los cambios. Por favor, inténtelo de nuevo.", category='danger')
-        return redirect(url_for('get_data', id=id))
+        return redirect(url_for('get_data', id=id, page=page))
 
     correo_electronico = form_data['correo_electronico']
 
@@ -397,7 +457,7 @@ Infraestructura TI"""
         flash('Datos actualizados exitosamente.', category='success')
 
     # Back to the page the record was edited from
-    return redirect(url_for('admin_data', page=request.form.get('page', 1, type=int)))
+    return redirect(url_for('admin_data', page=page))
 
 
 # Delete a record
@@ -416,11 +476,13 @@ def delete(id):
 @login_required
 def register():
     if request.method == "POST":
-        input_username = request.form.get("username")
+        input_username = (request.form.get("username") or "").strip()
         input_password = request.form.get("password")
         input_confirmation = request.form.get("confirmation")
         if not input_username:
             return render_template("register.html", message=1)
+        elif len(input_username) > USERNAME_MAX_LENGTH:
+            return render_template("register.html", message=7)
         elif not input_password:
             return render_template("register.html", message=2)
         elif not input_confirmation:
@@ -430,15 +492,14 @@ def register():
         elif len(input_password) < 8:
             return render_template("register.html", message=6)
 
-        with get_db_cursor(row_factory=psycopg.rows.dict_row) as cursor:
-            cursor.execute('SELECT * FROM users WHERE username = %s', (input_username,))
-            if cursor.fetchone():
-                return render_template("register.html", message=5)
-            hash_password = generate_password_hash(input_password, method='pbkdf2:sha256', salt_length=8)
-            cursor.execute(
-                'INSERT INTO users (username, hashed_password) VALUES (%s, %s)',
-                (input_username, hash_password)
-            )
+        try:
+            with get_db_cursor() as cursor:
+                cursor.execute(
+                    'INSERT INTO users (username, hashed_password) VALUES (%s, %s)',
+                    (input_username, generate_password_hash(input_password))
+                )
+        except psycopg.errors.UniqueViolation:
+            return render_template("register.html", message=5)
 
         flash(f"Usuario {input_username} registrado correctamente.", category='success')
         return redirect("/admin")
@@ -480,9 +541,9 @@ def restore(id):
         elif len(new_password) < 8:
             return render_template("restore.html", message=6, id=id, username=username)
 
-        hash_password = generate_password_hash(new_password, method='pbkdf2:sha256', salt_length=8)
         with get_db_cursor() as cursor:
-            cursor.execute("UPDATE users SET hashed_password = %s WHERE id = %s", (hash_password, id))
+            cursor.execute("UPDATE users SET hashed_password = %s WHERE id = %s",
+                           (generate_password_hash(new_password), id))
 
         flash("Datos actualizados exitosamente.", category='success')
         return redirect("/users")
@@ -514,50 +575,42 @@ def reports():
 @app.route("/generate", methods=['GET', 'POST'])
 @login_required
 def generate():
+    session.pop('start_date', None)
+    session.pop('end_date', None)
     if request.method == 'POST':
         start_date = request.form.get('start_date')
         end_date = request.form.get('end_date')
         if not start_date or not end_date:
             flash("Debe seleccionar una fecha de inicio y una fecha de fin.", category='warning')
-            return render_template("/generate.html", data=[])
+            return redirect(url_for('reports'))
+        try:
+            start, end = date.fromisoformat(start_date), date.fromisoformat(end_date)
+        except ValueError:
+            flash("Fechas no válidas. Use el formato AAAA-MM-DD.", category='warning')
+            return redirect(url_for('reports'))
+        if start > end:
+            flash("La fecha de inicio no puede ser posterior a la fecha de fin.", category='warning')
+            return redirect(url_for('reports'))
+        # Download reuses this range
+        session['start_date'] = start.isoformat()
+        session['end_date'] = end.isoformat()
 
-    with get_db_cursor(row_factory=psycopg.rows.dict_row) as cursor:
-        if request.method == 'POST':
-            start_end = start_date + " 00:00:00"
-            end_date = end_date + " 23:59:59"
-            session['start_date'] = start_end
-            session['end_date'] = end_date
-            cursor.execute(
-                'SELECT * FROM control_laboratorios_sistemas WHERE fecha_registro BETWEEN %s AND %s'
-                ' ORDER BY fecha_registro',
-                (start_end, end_date)
-            )
-        else:
-            session.pop('start_date', None)
-            session.pop('end_date', None)
-            cursor.execute('SELECT * FROM control_laboratorios_sistemas ORDER BY fecha_registro')
-        data = cursor.fetchall()
-    return render_template("/generate.html", data=data)
+    date_range = session_date_range()
+    data = fetch_reports("*", date_range, row_factory=psycopg.rows.dict_row)
+    return render_template("/generate.html", data=data,
+                           start=date_range and date_range[0],
+                           end=date_range and date_range[1] - timedelta(days=1))
 
 
 # Download the report as an Excel file
 @app.route("/download")
 @login_required
 def download():
-    start_date = session.get('start_date')
-    end_date = session.get('end_date')
-    query = """
-        SELECT fecha_registro, identificador_laboratorio, nombre_docente, correo_electronico,
-               programa, hora_ingreso, hora_salida, observacion, respuesta_incidencia
-        FROM control_laboratorios_sistemas
-    """
-    with get_db_cursor() as cursor:
-        if start_date and end_date:
-            cursor.execute(query + " WHERE fecha_registro BETWEEN %s AND %s ORDER BY fecha_registro",
-                           (start_date, end_date))
-        else:
-            cursor.execute(query + " ORDER BY fecha_registro")
-        data = cursor.fetchall()
+    data = fetch_reports(
+        "fecha_registro, identificador_laboratorio, nombre_docente, correo_electronico,"
+        " programa, hora_ingreso, hora_salida, observacion, respuesta_incidencia",
+        session_date_range()
+    )
 
     columns = [
         'Fecha', 'Laboratorio', 'Nombres',
@@ -568,8 +621,9 @@ def download():
 
     df = pd.DataFrame(data, columns=columns)
     df['Fecha'] = pd.to_datetime(df['Fecha'], errors='coerce').dt.strftime('%Y-%m-%d')
-    df['Hora de ingreso'] = df['Hora de ingreso'].astype(str)
-    df['Hora de salida'] = df['Hora de salida'].astype(str)
+    df['Hora de ingreso'] = df['Hora de ingreso'].map(format_hora)
+    df['Hora de salida'] = df['Hora de salida'].map(format_hora)
+    df['Respuesta'] = df['Respuesta'].fillna('')
 
     output = BytesIO()
     # strings_to_formulas=False: user text is never evaluated as an Excel formula
@@ -586,11 +640,13 @@ def download():
             'align': 'center',
             'valign': 'vcenter'
         })
+        # Long texts wrap instead of making the column endless
+        wrap_format = workbook.add_format({'text_wrap': True, 'valign': 'top'})
         for col_num, value in enumerate(df.columns):
             worksheet.write(0, col_num, value, header_format)
         for idx, col in enumerate(df.columns):
-            max_length = max([len(col), *df[col].astype(str).map(len)]) + 2
-            worksheet.set_column(idx, idx, max_length)
+            width = max([len(col), *df[col].astype(str).map(len)]) + 2
+            worksheet.set_column(idx, idx, min(width, 60), wrap_format if width > 60 else None)
     output.seek(0)
     timestamp = datetime.now(LOCAL_TZ).strftime('%Y%m%d_%H%M%S')
     filename = f'reporte_control_laboratorios_sistemas_{timestamp}.xlsx'

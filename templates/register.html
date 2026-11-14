@@ -19,7 +19,7 @@
 
         <div class="form-group">
             <input autocomplete="off" autofocus class="form-control input-custom" required
-                   name="username" placeholder="👤 Nombre de usuario" type="text">
+                   name="username" placeholder="👤 Nombre de usuario" type="text" maxlength="100">
         </div>
 
         {% if message == 1 %}
@@ -84,6 +84,15 @@
                 <span aria-hidden="true">&times;</span>
             </button>
             &#10060 Las contraseñas no coinciden. Por favor, inténtelo de nuevo.
+        </div>
+        {% endif %}
+
+        {% if message == 7 %}
+        <div class="alert alert-danger alert-dismissible fade show custom-alert">
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+            &#9997 El nombre de usuario no puede superar 100 caracteres.
         </div>
         {% endif %}
 
